@@ -4,6 +4,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Beehive
+import org.bukkit.block.ShulkerBox
 import org.bukkit.entity.EntityType
 import org.bukkit.entity.ItemFrame
 import org.bukkit.entity.Painting
@@ -23,121 +24,197 @@ import org.bukkit.event.inventory.InventoryOpenEvent
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent
 import org.bukkit.event.player.PlayerBucketEmptyEvent
 import org.bukkit.event.player.PlayerBucketFillEvent
+import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerRespawnEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 
-
+/**
+ * JTDemo - JouTak Demo Mode Plugin
+ * Обновлено: 2025-08-29 17:22:41
+ * Автор: Kostyamops
+ */
 class DemoListener(private val demoManager: DemoManager) : Listener {
 
-    // Префикс
+    // Обработка входа игрока для применения префикса
     @EventHandler(priority = EventPriority.NORMAL)
     fun onPlayerJoin(event: PlayerJoinEvent) {
         val player = event.player
         demoManager.applyDemoPrefixOnJoin(player)
+
+        // Также обновляем статус игрока
+        demoManager.updatePlayerDemoStatus(player)
     }
 
-    // Расход голода (выкл)
+    // Обработка телепортации игрока для проверки префикса
+    @EventHandler(priority = EventPriority.NORMAL)
+    fun onPlayerTeleport(event: PlayerTeleportEvent) {
+        val player = event.player
+
+        // Запускаем проверку префикса в следующем тике (после телепортации)
+        Bukkit.getScheduler().runTask(demoManager.plugin, Runnable {
+            demoManager.updatePlayerPrefix(player)
+        })
+    }
+
+    // Обработка движения игрока (для проверки префикса)
+    @EventHandler(priority = EventPriority.NORMAL)
+    fun onPlayerMove(event: PlayerMoveEvent) {
+        // Проверяем только изменение координат XYZ, а не поворот головы
+        if (event.from.x != event.to?.x || event.from.y != event.to?.y || event.from.z != event.to?.z) {
+            val player = event.player
+            demoManager.updatePlayerPrefix(player)
+        }
+    }
+
+    // Предотвращение расхода голода
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onFoodLevelChange(event: FoodLevelChangeEvent) {
         val player = event.entity
-        if (player is Player && demoManager.isInDemoMode(player)) {
-            event.isCancelled = true
-            player.foodLevel = 20
+        if (player is Player && demoManager.shouldHaveDemoRestrictions(player)) {
+            if (demoManager.isAllowed("gameplay", "preserve-food-level")) {
+                event.isCancelled = true
+                player.foodLevel = 20
+            }
         }
     }
 
-    // Атака мобов
+    // Предотвращение атаки игроков или сущностей
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onEntityDamage(event: EntityDamageByEntityEvent) {
         val damager = event.damager
-        if (damager is Player && demoManager.isInDemoMode(damager)) {
-            event.isCancelled = true
+        if (damager is Player && demoManager.shouldHaveDemoRestrictions(damager)) {
+            // Проверяем, можно ли наносить урон мобам или игрокам
+            if (event.entity is Player) {
+                if (!demoManager.isAllowed("gameplay", "allow-player-damage")) {
+                    event.isCancelled = true
+                }
+            } else {
+                if (!demoManager.isAllowed("gameplay", "allow-mob-damage")) {
+                    event.isCancelled = true
+                }
+            }
         }
     }
 
-    // Подбор предметов
+    // Предотвращение подбора предметов
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onItemPickup(event: EntityPickupItemEvent) {
         val entity = event.entity
-        if (entity is Player && demoManager.isInDemoMode(entity)) {
-            event.isCancelled = true
-        }
-    }
-
-    // Инвертарь лок
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onInventoryClick(event: InventoryClickEvent) {
-        val player = event.whoClicked
-        if (player is Player && demoManager.isInDemoMode(player)) {
-            event.isCancelled = true
-        }
-    }
-
-    // Сборщик
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onInventoryOpen(event: InventoryOpenEvent) {
-        val player = event.player
-        if (player is Player && demoManager.isInDemoMode(player)) {
-            if (event.inventory.type.name.contains("CRAFTER") ||
-                event.view.title.contains("Сборщик") ||
-                event.view.title.contains("Crafter")) {
+        if (entity is Player && demoManager.shouldHaveDemoRestrictions(entity)) {
+            if (!demoManager.isAllowed("gameplay", "allow-item-pickup")) {
                 event.isCancelled = true
             }
         }
     }
 
-    // Разрушение блоков
+    // Предотвращение броска предметов
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onItemDrop(event: PlayerDropItemEvent) {
+        val player = event.player
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
+            if (!demoManager.isAllowed("gameplay", "allow-item-drop")) {
+                event.isCancelled = true
+            }
+        }
+    }
+
+    // Предотвращение использования инвентаря
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onInventoryClick(event: InventoryClickEvent) {
+        val player = event.whoClicked
+        if (player is Player && demoManager.shouldHaveDemoRestrictions(player)) {
+            if (!demoManager.isAllowed("gameplay", "allow-inventory")) {
+                event.isCancelled = true
+            }
+        }
+    }
+
+    // Блокирование открытия некоторых инвентарей
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onInventoryOpen(event: InventoryOpenEvent) {
+        val player = event.player
+        if (player is Player && demoManager.shouldHaveDemoRestrictions(player)) {
+            // Проверяем тип инвентаря
+            val invName = event.inventory.type.name
+            val title = event.view.title
+
+            if (invName.contains("CRAFTER") || title.contains("Автокрафтер") || title.contains("Crafter")) {
+                if (!demoManager.isAllowed("blocks", "allow-crafters")) {
+                    event.isCancelled = true
+                    player.sendMessage("§cВ демо-режиме запрещено использовать автокрафтер")
+                }
+            } else if (invName.contains("SHULKER")) {
+                if (!demoManager.isAllowed("blocks", "allow-shulker-boxes")) {
+                    event.isCancelled = true
+                }
+            } else if (invName.contains("CHEST")) {
+                if (!demoManager.isAllowed("blocks", "allow-chests")) {
+                    event.isCancelled = true
+                }
+            } else if (invName.contains("FURNACE")) {
+                if (!demoManager.isAllowed("blocks", "allow-furnaces")) {
+                    event.isCancelled = true
+                }
+            }
+        }
+    }
+
+    // Предотвращение разрушения блоков
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBlockBreak(event: BlockBreakEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
-            event.isCancelled = true
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
+            if (!demoManager.isAllowed("blocks", "allow-block-breaking")) {
+                event.isCancelled = true
+            }
         }
     }
 
-    // Размещение блоков
+    // Предотвращение размещения блоков
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBlockPlace(event: BlockPlaceEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
             event.isCancelled = true
         }
     }
 
-    // Ведра набирать
+    // Предотвращение набора жидкостей ведрами
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBucketFill(event: PlayerBucketFillEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
             event.isCancelled = true
         }
     }
 
-    // Ведра ставить
+    // Предотвращение размещения жидкостей ведрами
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBucketEmpty(event: PlayerBucketEmptyEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
             event.isCancelled = true
         }
     }
 
-    // Стойки для брони
+    // Предотвращение манипуляций со стойками для брони
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onArmorStandManipulate(event: PlayerArmorStandManipulateEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
             event.isCancelled = true
         }
     }
 
-    // Вращение рамок
+    // Предотвращение взаимодействия с картинами и рамками (вращение, взятие предметов)
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPlayerInteractEntity(event: PlayerInteractEntityEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
             val entity = event.rightClicked
             if (entity is ItemFrame || entity is Painting ||
                 entity.type == EntityType.ITEM_FRAME ||
@@ -148,62 +225,66 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
         }
     }
 
-    // Картины, рамки
+    // Предотвращение разрушения висящих сущностей (картин, рамок)
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onHangingBreakByEntity(event: HangingBreakByEntityEvent) {
         val remover = event.remover
-        if (remover is Player && demoManager.isInDemoMode(remover)) {
+        if (remover is Player && demoManager.shouldHaveDemoRestrictions(remover)) {
             event.isCancelled = true
         }
     }
 
-    // Хендлер взаимодействия
+    // Обработка взаимодействия игрока (таблички, карты, рамки, двери, кнопки и т.д.)
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPlayerInteract(event: PlayerInteractEvent) {
         val player = event.player
-        if (!demoManager.isInDemoMode(player)) {
+        if (!demoManager.shouldHaveDemoRestrictions(player)) {
             return
         }
 
         val block = event.clickedBlock ?: return
 
-        // Проверяем блоки
+        // Проверяем блоки, с которыми нельзя взаимодействовать
         when (block.type) {
-            // Проигрыватель
+            // Проигрыватель дисков
             Material.JUKEBOX -> {
-                event.isCancelled = true
-                return
+                if (!demoManager.isAllowed("blocks", "allow-jukeboxes")) {
+                    event.isCancelled = true
+                    return
+                }
             }
 
-            // Сбор меда
+            // Ульи и пчелиные домики
             Material.BEEHIVE, Material.BEE_NEST -> {
-                val item = event.item
-                if (item != null) {
-                    val type = item.type
-                    if (type.toString().contains("BOTTLE") ||
-                        type.toString().contains("HONEYCOMB") ||
-                        type.toString().contains("SHEARS")) {
-                        event.isCancelled = true
-                        return
-                    }
+                if (!demoManager.isAllowed("blocks", "allow-beehives")) {
+                    event.isCancelled = true
+                    return
                 }
-
-                // Улей
-                event.isCancelled = true
-                return
             }
 
             // Книжные полки
             Material.BOOKSHELF, Material.CHISELED_BOOKSHELF -> {
-                event.isCancelled = true
-                return
-            }
-
-            // Сборщик
-            Material.CRAFTING_TABLE -> {
-                if (block.type.name.contains("CRAFTER")) {
+                if (!demoManager.isAllowed("blocks", "allow-bookshelves")) {
                     event.isCancelled = true
                     return
+                }
+            }
+
+            // Верстаки
+            Material.CRAFTING_TABLE -> {
+                if (!demoManager.isAllowed("blocks", "allow-crafting-tables")) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+
+            // Автокрафтеры
+            Material.CRAFTING_TABLE -> {
+                if (block.type.name.contains("CRAFTER")) {
+                    if (!demoManager.isAllowed("blocks", "allow-crafters")) {
+                        event.isCancelled = true
+                        return
+                    }
                 }
             }
 
@@ -211,30 +292,63 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
             Material.OAK_FENCE_GATE, Material.SPRUCE_FENCE_GATE, Material.BIRCH_FENCE_GATE,
             Material.JUNGLE_FENCE_GATE, Material.ACACIA_FENCE_GATE, Material.DARK_OAK_FENCE_GATE,
             Material.CRIMSON_FENCE_GATE, Material.WARPED_FENCE_GATE -> {
-                event.isCancelled = true
-                return
+                if (!demoManager.isAllowed("blocks", "allow-gates")) {
+                    event.isCancelled = true
+                    return
+                }
             }
 
-            // Разрешаем двери, кнопки, нажимные плиты, порталы
+            // Двери
             Material.OAK_DOOR, Material.SPRUCE_DOOR, Material.BIRCH_DOOR,
             Material.JUNGLE_DOOR, Material.ACACIA_DOOR, Material.DARK_OAK_DOOR,
-            Material.CRIMSON_DOOR, Material.WARPED_DOOR, Material.IRON_DOOR,
+            Material.CRIMSON_DOOR, Material.WARPED_DOOR, Material.IRON_DOOR -> {
+                if (!demoManager.isAllowed("blocks", "allow-doors")) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+
+            // Люки
+            Material.OAK_TRAPDOOR, Material.SPRUCE_TRAPDOOR, Material.BIRCH_TRAPDOOR,
+            Material.JUNGLE_TRAPDOOR, Material.ACACIA_TRAPDOOR, Material.DARK_OAK_TRAPDOOR,
+            Material.CRIMSON_TRAPDOOR, Material.WARPED_TRAPDOOR, Material.IRON_TRAPDOOR -> {
+                if (!demoManager.isAllowed("blocks", "allow-trapdoors")) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+
+            // Кнопки
             Material.STONE_BUTTON, Material.OAK_BUTTON, Material.SPRUCE_BUTTON,
             Material.BIRCH_BUTTON, Material.JUNGLE_BUTTON, Material.ACACIA_BUTTON,
             Material.DARK_OAK_BUTTON, Material.CRIMSON_BUTTON, Material.WARPED_BUTTON,
-            Material.POLISHED_BLACKSTONE_BUTTON,
+            Material.POLISHED_BLACKSTONE_BUTTON -> {
+                if (!demoManager.isAllowed("blocks", "allow-buttons")) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+
+            // Нажимные плиты
             Material.STONE_PRESSURE_PLATE, Material.OAK_PRESSURE_PLATE,
             Material.SPRUCE_PRESSURE_PLATE, Material.BIRCH_PRESSURE_PLATE,
             Material.JUNGLE_PRESSURE_PLATE, Material.ACACIA_PRESSURE_PLATE,
             Material.DARK_OAK_PRESSURE_PLATE, Material.CRIMSON_PRESSURE_PLATE,
             Material.WARPED_PRESSURE_PLATE, Material.POLISHED_BLACKSTONE_PRESSURE_PLATE,
-            Material.LIGHT_WEIGHTED_PRESSURE_PLATE, Material.HEAVY_WEIGHTED_PRESSURE_PLATE,
+            Material.LIGHT_WEIGHTED_PRESSURE_PLATE, Material.HEAVY_WEIGHTED_PRESSURE_PLATE -> {
+                if (!demoManager.isAllowed("blocks", "allow-pressure-plates")) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+
+            // Порталы всегда разрешены
             Material.NETHER_PORTAL, Material.END_PORTAL -> {
                 return
             }
 
             else -> {
-                // Проверка других блоков
+                // Для всех других блоков проверяем, являются ли они картами, табличками, рамками и т.д.
                 val typeName = block.type.toString()
                 if (typeName.contains("SIGN") ||
                     typeName.contains("MAP") ||
@@ -243,7 +357,6 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
                     typeName.contains("FLOWER_POT") ||
                     typeName.contains("POTTED_") ||
                     typeName.contains("CRAFTER") ||
-                    block.type == Material.CRAFTING_TABLE ||
                     block.type == Material.ENCHANTING_TABLE ||
                     block.type == Material.ANVIL ||
                     block.type == Material.BREWING_STAND) {
@@ -252,7 +365,7 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
             }
         }
 
-        // Предмет в руке
+        // Также проверяем предмет в руке
         val item = event.item
         if (item != null) {
             val type = item.type
@@ -270,27 +383,36 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
         }
     }
 
-    // Картины и рамки
+    // Предотвращение разрушения картин и рамок для предметов
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
         val damager = event.damager
         val entity = event.entity
 
-        if (damager is Player && demoManager.isInDemoMode(damager)) {
+        if (damager is Player && demoManager.shouldHaveDemoRestrictions(damager)) {
+            // Картины и рамки защищены всегда
             if (entity is Painting || entity is ItemFrame ||
                 entity.type == EntityType.PAINTING || entity.type == EntityType.ITEM_FRAME ||
                 entity.type == EntityType.GLOW_ITEM_FRAME) {
                 event.isCancelled = true
             }
+            // Если сущность - игрок, и повреждение игроков запрещено
+            else if (entity is Player && !demoManager.isAllowed("gameplay", "allow-player-damage")) {
+                event.isCancelled = true
+            }
+            // Если сущность - моб, и повреждение мобов запрещено
+            else if (entity !is Player && !demoManager.isAllowed("gameplay", "allow-mob-damage")) {
+                event.isCancelled = true
+            }
         }
     }
 
-    // ТП на спавн деморежима
+    // Обработка смерти игрока и возрождение в точке спавна демо-режима
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPlayerDeath(event: PlayerDeathEvent) {
         val player = event.entity
-        if (demoManager.isInDemoMode(player)) {
-            // Очистка предметов
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
+            // Очищаем выпадающие предметы у игрока в демо-режиме
             event.drops.clear()
         }
     }
@@ -298,12 +420,18 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPlayerRespawn(event: PlayerRespawnEvent) {
         val player = event.player
-        if (demoManager.isInDemoMode(player)) {
-            // Точка возрождения в мире
+        if (demoManager.shouldHaveDemoRestrictions(player)) {
+            // Получаем точку возрождения в демо-режиме
             val demoSpawn = demoManager.getDemoSpawn()
             if (demoSpawn != null) {
                 event.respawnLocation = demoSpawn
+
+                // Проверяем префикс в следующем тике (после возрождения)
+                Bukkit.getScheduler().runTask(demoManager.plugin, Runnable {
+                    demoManager.updatePlayerPrefix(player)
+                })
             } else {
+                // Используем точку возрождения мира по умолчанию вместо 0,0,0
                 event.respawnLocation = player.world.spawnLocation
             }
         }
