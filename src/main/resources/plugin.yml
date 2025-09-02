@@ -1,12 +1,12 @@
 name: JTDemo
-version: 1.0.1
+version: 1.0.2
 main: ru.joutak.jtdemo.JTDemo
 api-version: 1.21
 description: Плагин JouTak демо-режима
 commands:
   jtdemo:
     description: Команды демо-режима
-    usage: /jtdemo [on|off|reset|setspawn|force|unforce|reload|tp] [аргументы]
+    usage: /jtdemo [on|off|reset|setspawn|force|unforce|reload|tp|list] [аргументы]
     permission: jtdemo.use
 permissions:
   jtdemo.use:

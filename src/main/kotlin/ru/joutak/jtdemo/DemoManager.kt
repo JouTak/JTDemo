@@ -8,11 +8,7 @@ import org.bukkit.scoreboard.Team
 import java.io.File
 import java.util.*
 
-/**
- * JTDemo - JouTak Demo Mode Plugin
- * Обновлено: 2025-08-29 17:22:41
- * Автор: Kostyamops
- */
+
 class DemoManager(val plugin: JTDemo) {
 
     private val demoPlayers = mutableSetOf<UUID>()
@@ -24,7 +20,6 @@ class DemoManager(val plugin: JTDemo) {
     private var demoTeam: Team? = null
     private val forcedPlayers = mutableSetOf<String>()
     private val pendingTeleports = mutableSetOf<String>() // Игроки, ожидающие телепортации при входе
-    private val tempDisabledDemo = mutableSetOf<UUID>() // Игроки с временно отключенным демо-режимом
 
     init {
         // Создаем директорию плагина, если она не существует
@@ -114,18 +109,6 @@ class DemoManager(val plugin: JTDemo) {
         pendingTeleports.clear()
         pendingTeleports.addAll(dataConfig.getStringList("pending-teleports"))
 
-        // Загружаем игроков с временно отключенным демо-режимом
-        tempDisabledDemo.clear()
-        val tempDisabledList = dataConfig.getStringList("temp-disabled-demo")
-        tempDisabledList.forEach {
-            try {
-                val uuid = UUID.fromString(it)
-                tempDisabledDemo.add(uuid)
-            } catch (e: IllegalArgumentException) {
-                plugin.logger.warning("Некорректный UUID в списке временно отключенного демо-режима: $it")
-            }
-        }
-
         // Загружаем точку возрождения в демо-режиме
         if (dataConfig.contains("demo-spawn")) {
             val world = Bukkit.getWorld(dataConfig.getString("demo-spawn.world", "world") ?: "world")
@@ -156,9 +139,6 @@ class DemoManager(val plugin: JTDemo) {
 
         // Сохраняем ожидающих телепортации
         dataConfig.set("pending-teleports", ArrayList(pendingTeleports))
-
-        // Сохраняем игроков с временно отключенным демо-режимом
-        dataConfig.set("temp-disabled-demo", tempDisabledDemo.map { it.toString() })
 
         // Сохраняем точку возрождения в демо-режиме
         demoSpawn?.let {
@@ -199,8 +179,7 @@ class DemoManager(val plugin: JTDemo) {
      * Вызывается при телепортации или изменении положения
      */
     fun updatePlayerPrefix(player: Player) {
-        // Проверяем, находится ли игрок в демо-режиме и не отключен ли он временно
-        if (isInDemoMode(player) && !isTemporarilyDisabled(player)) {
+        if (demoPlayers.contains(player.uniqueId)) {
             addPlayerToTeam(player)
         } else {
             removePlayerFromTeam(player)
@@ -211,9 +190,6 @@ class DemoManager(val plugin: JTDemo) {
         val uuid = player.uniqueId
         passwords[uuid] = password
         demoPlayers.add(uuid)
-
-        // Удаляем из списка временно отключенных, если игрок там был
-        tempDisabledDemo.remove(uuid)
 
         // Добавляем игрока в демо-команду
         addPlayerToTeam(player)
@@ -244,8 +220,8 @@ class DemoManager(val plugin: JTDemo) {
             }
 
             // Игрок в принудительном режиме и ввел правильный пароль
-            // Добавляем его в список временно отключенных
-            tempDisabledDemo.add(uuid)
+            // Удаляем из демо-списка (но оставляем в forced-списке)
+            demoPlayers.remove(uuid)
 
             // Удаляем игрока из демо-команды
             removePlayerFromTeam(player)
@@ -316,16 +292,18 @@ class DemoManager(val plugin: JTDemo) {
         val player = Bukkit.getPlayerExact(playerName)
         if (player != null) {
             val defaultPassword = plugin.getConfig().getString("settings.default-password") ?: "12345"
-            if (!demoPlayers.contains(player.uniqueId)) {
+            if (!passwords.containsKey(player.uniqueId)) {
                 passwords[player.uniqueId] = defaultPassword
-                demoPlayers.add(player.uniqueId)
             }
 
-            // Удаляем из списка временно отключенных
-            tempDisabledDemo.remove(player.uniqueId)
+            // Добавляем в список демо-игроков
+            demoPlayers.add(player.uniqueId)
 
             // Добавляем префикс
             addPlayerToTeam(player)
+
+            // Уведомляем игрока
+            player.sendMessage("§cВы были добавлены в принудительный демо-режим администратором.")
         }
 
         saveData()
@@ -344,17 +322,15 @@ class DemoManager(val plugin: JTDemo) {
 
         // Если игрок онлайн, удаляем его из демо-режима (если у него нет личного пароля)
         val player = Bukkit.getPlayerExact(playerName)
-        if (player != null && demoPlayers.contains(player.uniqueId)) {
-            // Удаляем только если игрок не активировал демо-режим сам
+        if (player != null) {
+            // Удаляем из списка демо-игроков, если у него нет собственного пароля
             if (!passwords.containsKey(player.uniqueId)) {
                 demoPlayers.remove(player.uniqueId)
+                removePlayerFromTeam(player)
             }
 
-            // Удаляем из списка временно отключенных
-            tempDisabledDemo.remove(player.uniqueId)
-
-            // Обновляем префикс
-            updatePlayerPrefix(player)
+            // Уведомляем игрока
+            player.sendMessage("§aВы были удалены из принудительного демо-режима администратором.")
         }
 
         saveData()
@@ -362,54 +338,26 @@ class DemoManager(val plugin: JTDemo) {
     }
 
     /**
-     * Проверяет, отключен ли демо-режим временно
-     */
-    fun isTemporarilyDisabled(player: Player): Boolean {
-        return tempDisabledDemo.contains(player.uniqueId)
-    }
-
-    /**
      * Обновляет статус демо-режима для игрока (вызывается при изменении data.yml)
      */
     fun updatePlayerDemoStatus(player: Player) {
-        val wasInDemo = demoPlayers.contains(player.uniqueId)
-        val wasForced = forcedPlayers.contains(player.name)
-        val wasTemporarilyDisabled = tempDisabledDemo.contains(player.uniqueId)
-
         // Проверяем, должен ли игрок быть в демо-режиме
-        if (forcedPlayers.contains(player.name)) {
-            // Игрок должен быть в принудительном демо-режиме
-            if (!wasInDemo) {
-                // Добавляем игрока в демо-режим
-                val defaultPassword = plugin.getConfig().getString("settings.default-password") ?: "12345"
-                passwords[player.uniqueId] = defaultPassword
-                demoPlayers.add(player.uniqueId)
-
-                // Сбрасываем временное отключение при входе
-                tempDisabledDemo.remove(player.uniqueId)
-
-                // Добавляем префикс
-                addPlayerToTeam(player)
-
-                // Отправляем сообщение игроку
-                player.sendMessage("§cВы были добавлены в принудительный демо-режим администратором.")
-            } else if (wasTemporarilyDisabled) {
-                // Если игрок входит на сервер и был в списке временно отключенных,
-                // восстанавливаем демо-режим
-                tempDisabledDemo.remove(player.uniqueId)
-                addPlayerToTeam(player)
-                player.sendMessage("§cДемо-режим был восстановлен после перезахода.")
-            }
-        } else if (wasForced && wasInDemo) {
-            // Игрок был удален из принудительного демо-режима
-            // Проверяем, активировал ли он демо-режим сам или это было принудительно
+        if (forcedPlayers.contains(player.name) && !demoPlayers.contains(player.uniqueId)) {
+            // Игрок в принудительном списке, но не в демо-списке - добавляем в демо-список
+            val defaultPassword = plugin.getConfig().getString("settings.default-password") ?: "12345"
             if (!passwords.containsKey(player.uniqueId)) {
-                // Удаляем игрока из демо-режима
+                passwords[player.uniqueId] = defaultPassword
+            }
+            demoPlayers.add(player.uniqueId)
+            addPlayerToTeam(player)
+            player.sendMessage("§cВы находитесь в принудительном демо-режиме. Используйте /jtdemo off ${defaultPassword} для временного отключения.")
+        } else if (!forcedPlayers.contains(player.name) && demoPlayers.contains(player.uniqueId)) {
+            // Проверяем, не был ли игрок удален из принудительного списка, но остался в демо-списке
+            // Это происходит, когда администратор убирает игрока из принудительного режима
+            // Если игрок не включал демо самостоятельно (нет личного пароля), то удаляем из демо-списка
+            if (!passwords.containsKey(player.uniqueId)) {
                 demoPlayers.remove(player.uniqueId)
-                tempDisabledDemo.remove(player.uniqueId)
                 removePlayerFromTeam(player)
-
-                // Отправляем сообщение игроку
                 player.sendMessage("§aВы были удалены из принудительного демо-режима администратором.")
             }
         }
@@ -426,27 +374,14 @@ class DemoManager(val plugin: JTDemo) {
     }
 
     fun isInDemoMode(player: Player): Boolean {
-        // Проверяем, не находится ли игрок в списке принудительных демо-игроков
-        if (forcedPlayers.contains(player.name)) {
-            // Если да, но у него нет пароля, устанавливаем пароль по умолчанию
-            if (!passwords.containsKey(player.uniqueId)) {
-                val defaultPassword = plugin.getConfig().getString("settings.default-password") ?: "12345"
-                passwords[player.uniqueId] = defaultPassword
-                demoPlayers.add(player.uniqueId)
-                saveData()
-            }
-            return true
-        }
-
         return demoPlayers.contains(player.uniqueId)
     }
 
     /**
      * Проверяет, должен ли игрок иметь ограничения демо-режима
-     * (учитывает как статус демо-режима, так и временное отключение)
      */
     fun shouldHaveDemoRestrictions(player: Player): Boolean {
-        return isInDemoMode(player) && !isTemporarilyDisabled(player)
+        return demoPlayers.contains(player.uniqueId)
     }
 
     fun setDemoSpawn(location: Location) {
@@ -462,17 +397,24 @@ class DemoManager(val plugin: JTDemo) {
      * Применяет префикс для игрока при входе на сервер
      */
     fun applyDemoPrefixOnJoin(player: Player) {
-        // Если игрок в принудительном демо-режиме, то при входе отключаем временное отключение
-        if (forcedPlayers.contains(player.name)) {
-            tempDisabledDemo.remove(player.uniqueId)
+        // Если игрок в принудительном демо-режиме, но не в списке демо-игроков,
+        // добавляем его в список демо-игроков
+        if (forcedPlayers.contains(player.name) && !demoPlayers.contains(player.uniqueId)) {
+            // Устанавливаем пароль по умолчанию
+            val defaultPassword = plugin.getConfig().getString("settings.default-password") ?: "12345"
+            if (!passwords.containsKey(player.uniqueId)) {
+                passwords[player.uniqueId] = defaultPassword
+            }
+
+            // Добавляем в список демо-игроков
+            demoPlayers.add(player.uniqueId)
+
+            // Уведомляем игрока
+            player.sendMessage("§cВы находитесь в принудительном демо-режиме. Используйте /jtdemo off ${defaultPassword} для временного отключения.")
         }
 
-        // Проверяем, должен ли игрок иметь ограничения и префикс
-        if (shouldHaveDemoRestrictions(player)) {
-            addPlayerToTeam(player)
-        } else {
-            removePlayerFromTeam(player)
-        }
+        // Обновляем префикс
+        updatePlayerPrefix(player)
 
         // Проверяем, ожидает ли игрок телепортации
         if (pendingTeleports.contains(player.name)) {
@@ -507,21 +449,10 @@ class DemoManager(val plugin: JTDemo) {
             if (player == null || !player.isOnline) {
                 val offlinePlayer = Bukkit.getOfflinePlayer(uuid)
                 offlinePlayer.name?.let { name ->
-                    if (!pendingTeleports.contains(name) && !tempDisabledDemo.contains(uuid)) {
+                    if (!pendingTeleports.contains(name)) {
                         pendingTeleports.add(name)
                         offlinePlayers.add(name)
                     }
-                }
-            }
-        }
-
-        // Добавляем игроков из принудительного демо-режима
-        forcedPlayers.forEach { name ->
-            val player = Bukkit.getPlayerExact(name)
-            if (player == null || !player.isOnline) {
-                if (!pendingTeleports.contains(name)) {
-                    pendingTeleports.add(name)
-                    offlinePlayers.add(name)
                 }
             }
         }
@@ -568,12 +499,10 @@ class DemoManager(val plugin: JTDemo) {
         // или в списке принудительных демо-игроков
         val isInDemoMode = demoPlayers.any { uuid ->
             val offlinePlayer = Bukkit.getOfflinePlayer(uuid)
-            offlinePlayer.name == playerName && !tempDisabledDemo.contains(uuid)
+            offlinePlayer.name == playerName
         }
 
-        val isForced = forcedPlayers.contains(playerName)
-
-        if (isInDemoMode || isForced) {
+        if (isInDemoMode || forcedPlayers.contains(playerName)) {
             // Добавляем игрока в список ожидающих телепортации
             if (!pendingTeleports.contains(playerName)) {
                 pendingTeleports.add(playerName)
@@ -618,11 +547,7 @@ class DemoManager(val plugin: JTDemo) {
      */
     fun getDemoPlayerNames(): List<String> {
         return demoPlayers.mapNotNull { uuid ->
-            if (!tempDisabledDemo.contains(uuid)) {
-                Bukkit.getOfflinePlayer(uuid).name
-            } else {
-                null
-            }
+            Bukkit.getOfflinePlayer(uuid).name
         }
     }
 }

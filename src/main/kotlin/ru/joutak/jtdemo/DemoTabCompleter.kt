@@ -7,11 +7,7 @@ import org.bukkit.command.TabCompleter
 import org.bukkit.entity.Player
 import java.util.ArrayList
 
-/**
- * JTDemo - JouTak Demo Mode Plugin
- * Обновлено: 2025-08-29 16:50:16
- * Автор: Kostyamops
- */
+
 class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
 
     override fun onTabComplete(
@@ -67,12 +63,12 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
                         }
                     }
                 }
-                "off" -> {
-                    // Для off предлагаем пароль по умолчанию, если это игрок в принудительном режиме
-                    if (sender is Player && demoManager.isForcedDemoPlayer(sender)) {
-                        completions.add(demoManager.getDefaultPassword())
-                    }
-                }
+//                "off" -> {
+//                    // Для off предлагаем пароль по умолчанию, если это игрок в принудительном режиме
+//                    if (sender is Player && demoManager.isForcedDemoPlayer(sender)) {
+//                        completions.add(demoManager.getDefaultPassword())
+//                    }
+//                }
                 "tp" -> {
                     // Для tp предлагаем "all" и имена игроков в демо-режиме
                     if (sender.hasPermission("jtdemo.admin")) {
@@ -131,6 +127,7 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
             commands.add("unforce")
             commands.add("reload")
             commands.add("tp")
+            commands.add("list")
         }
 
         return commands

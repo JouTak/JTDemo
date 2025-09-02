@@ -5,11 +5,7 @@ import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 
-/**
- * JTDemo - JouTak Demo Mode Plugin
- * Обновлено: 2025-08-29 17:22:41
- * Автор: Kostyamops
- */
+
 class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
@@ -44,6 +40,9 @@ class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
                 "tp" -> {
                     return handleDemoTeleport(sender, args)
                 }
+                "list" -> {
+                    return handleDemoList(sender)
+                }
                 else -> {
                     sendHelpMessage(sender)
                     return true
@@ -60,7 +59,7 @@ class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
         }
 
         // Проверяем, не находится ли игрок уже в демо-режиме
-        if (demoManager.isInDemoMode(sender) && !demoManager.isTemporarilyDisabled(sender)) {
+        if (demoManager.isInDemoMode(sender)) {
             sender.sendMessage("§cВы уже находитесь в демо-режиме.")
             return true
         }
@@ -261,6 +260,46 @@ class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
         return true
     }
 
+    /**
+     * Обработчик команды list, показывающей списки игроков в демо-режиме
+     */
+    private fun handleDemoList(sender: CommandSender): Boolean {
+        if (!sender.hasPermission("jtdemo.admin")) {
+            sender.sendMessage("§cУ вас нет прав для использования этой команды.")
+            return true
+        }
+
+        // Получаем список игроков в демо-режиме
+        val demoPlayers = demoManager.getDemoPlayerNames()
+        // Получаем список игроков в принудительном демо-режиме
+        val forcedPlayers = demoManager.getForcedPlayers()
+
+        // Отправляем информацию отправителю
+        sender.sendMessage("§6========== JTDemo Списки игроков ==========")
+
+        if (demoPlayers.isNotEmpty()) {
+            sender.sendMessage("§eИгроки в демо-режиме (${demoPlayers.size}):")
+            demoPlayers.forEach { player ->
+                sender.sendMessage("§7- §f$player")
+            }
+        } else {
+            sender.sendMessage("§eИгроки в демо-режиме: §7нет")
+        }
+
+        if (forcedPlayers.isNotEmpty()) {
+            sender.sendMessage("§eИгроки в принудительном демо-режиме (${forcedPlayers.size}):")
+            forcedPlayers.forEach { player ->
+                sender.sendMessage("§7- §f$player")
+            }
+        } else {
+            sender.sendMessage("§eИгроки в принудительном демо-режиме: §7нет")
+        }
+
+        sender.sendMessage("§6===========================================")
+
+        return true
+    }
+
     private fun sendHelpMessage(sender: CommandSender) {
         sender.sendMessage("§6========== JTDemo Команды ==========")
         sender.sendMessage("§e/jtdemo on [пароль] §f- Включить демо-режим")
@@ -272,6 +311,7 @@ class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
             sender.sendMessage("§e/jtdemo force [игрок] §f- Добавить игрока в принудительный демо-режим")
             sender.sendMessage("§e/jtdemo unforce [игрок] §f- Удалить игрока из принудительного демо-режима")
             sender.sendMessage("§e/jtdemo tp [all|игрок] §f- Телепортировать всех или конкретного игрока в демо-режиме на точку возрождения")
+            sender.sendMessage("§e/jtdemo list §f- Показать список игроков в демо-режиме и принудительном демо-режиме")
             sender.sendMessage("§e/jtdemo reload §f- Перезагрузить плагин и обновить настройки")
         }
 

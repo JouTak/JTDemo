@@ -3,21 +3,11 @@ package ru.joutak.jtdemo
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardWatchEventKinds
-import java.nio.file.WatchService
-import java.util.concurrent.TimeUnit
 
-/**
- * JTDemo - JouTak Demo Mode Plugin
- * Обновлено: 2025-08-29 16:27:58
- * Автор: Kostyamops
- */
+
 class JTDemo : JavaPlugin() {
 
     lateinit var demoManager: DemoManager
-    private var fileWatcher: WatchService? = null
     private var lastModified: Long = 0
     private var watcherTask: Int = -1
 
@@ -50,9 +40,6 @@ class JTDemo : JavaPlugin() {
             Bukkit.getScheduler().cancelTask(watcherTask)
         }
 
-        // Закрываем наблюдатель файлов
-        fileWatcher?.close()
-
         // Сохраняем все данные
         demoManager.saveData()
         logger.info("JTDemo плагин выключен!")
@@ -73,11 +60,13 @@ class JTDemo : JavaPlugin() {
         // Сохраняем текущее время модификации
         lastModified = dataFile.lastModified()
 
-        // Запускаем периодическую проверку файла
-        val checkInterval = getConfig().getLong("settings.data-check-interval", 30)
+        // Запускаем периодическую проверку файла каждые 5 секунд вместо чтения из конфига
+        val checkInterval = 5L // Проверка каждые 5 секунд
         watcherTask = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, {
             checkDataFileChanges()
         }, 20L * checkInterval, 20L * checkInterval)
+
+        logger.info("Настроено сохранение data.yml каждые $checkInterval секунд")
     }
 
     /**
@@ -86,6 +75,8 @@ class JTDemo : JavaPlugin() {
     private fun checkDataFileChanges() {
         val dataFile = File(dataFolder, "data.yml")
 
+        // Проверка изменений закомментирована, для применения изменений используйте /jtdemo reload
+        /*
         if (dataFile.exists() && dataFile.lastModified() > lastModified) {
             logger.info("Обнаружены изменения в файле data.yml, перезагружаем данные...")
             lastModified = dataFile.lastModified()
@@ -97,6 +88,12 @@ class JTDemo : JavaPlugin() {
             Bukkit.getOnlinePlayers().forEach { player ->
                 demoManager.updatePlayerDemoStatus(player)
             }
+        }
+        */
+
+        // Обновляем lastModified без проверки
+        if (dataFile.exists()) {
+            lastModified = dataFile.lastModified()
         }
     }
 }

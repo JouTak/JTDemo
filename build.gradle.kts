@@ -24,7 +24,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:$minecraftVersion-R0.1-SNAPSHOT")
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
 }
 
 kotlin {
@@ -32,6 +32,8 @@ kotlin {
 }
 
 tasks.shadowJar {
+    relocate("kotlin", "${project.group}.lib.kotlin")
+
     archiveClassifier = ""
     archiveFileName.set("${project.name}-${project.version}.jar")
 

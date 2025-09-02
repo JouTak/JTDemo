@@ -4,6 +4,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Beehive
+import org.bukkit.block.Lectern
 import org.bukkit.block.ShulkerBox
 import org.bukkit.entity.EntityType
 import org.bukkit.entity.ItemFrame
@@ -12,6 +13,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.block.Action
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.EntityDamageByEntityEvent
@@ -19,8 +21,12 @@ import org.bukkit.event.entity.EntityPickupItemEvent
 import org.bukkit.event.entity.FoodLevelChangeEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.hanging.HangingBreakByEntityEvent
+import org.bukkit.event.inventory.InventoryAction
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryDragEvent
+import org.bukkit.event.inventory.InventoryMoveItemEvent
 import org.bukkit.event.inventory.InventoryOpenEvent
+import org.bukkit.event.inventory.InventoryType
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent
 import org.bukkit.event.player.PlayerBucketEmptyEvent
 import org.bukkit.event.player.PlayerBucketFillEvent
@@ -31,12 +37,9 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.inventory.ItemStack
 
-/**
- * JTDemo - JouTak Demo Mode Plugin
- * Обновлено: 2025-08-29 17:22:41
- * Автор: Kostyamops
- */
+
 class DemoListener(private val demoManager: DemoManager) : Listener {
 
     // Обработка входа игрока для применения префикса
@@ -122,17 +125,6 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
         }
     }
 
-    // Предотвращение использования инвентаря
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onInventoryClick(event: InventoryClickEvent) {
-        val player = event.whoClicked
-        if (player is Player && demoManager.shouldHaveDemoRestrictions(player)) {
-            if (!demoManager.isAllowed("gameplay", "allow-inventory")) {
-                event.isCancelled = true
-            }
-        }
-    }
-
     // Блокирование открытия некоторых инвентарей
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onInventoryOpen(event: InventoryOpenEvent) {
@@ -142,10 +134,17 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
             val invName = event.inventory.type.name
             val title = event.view.title
 
+            // Проверяем кафедру
+            if (event.inventory.type == InventoryType.LECTERN) {
+                if (!demoManager.isAllowed("blocks", "allow-lectern")) {
+                    event.isCancelled = true
+                }
+                return
+            }
+
             if (invName.contains("CRAFTER") || title.contains("Автокрафтер") || title.contains("Crafter")) {
                 if (!demoManager.isAllowed("blocks", "allow-crafters")) {
                     event.isCancelled = true
-                    player.sendMessage("§cВ демо-режиме запрещено использовать автокрафтер")
                 }
             } else if (invName.contains("SHULKER")) {
                 if (!demoManager.isAllowed("blocks", "allow-shulker-boxes")) {
@@ -235,7 +234,7 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
     }
 
     // Обработка взаимодействия игрока (таблички, карты, рамки, двери, кнопки и т.д.)
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.LOWEST)
     fun onPlayerInteract(event: PlayerInteractEvent) {
         val player = event.player
         if (!demoManager.shouldHaveDemoRestrictions(player)) {
@@ -243,6 +242,18 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
         }
 
         val block = event.clickedBlock ?: return
+        val itemInHand = event.item
+
+        // Особая обработка для кафедры (lectern)
+        if (block.type == Material.LECTERN) {
+            // Полностью блокируем взаимодействие с кафедрами, если они не разрешены
+            if (!demoManager.isAllowed("blocks", "allow-lectern")) {
+                event.isCancelled = true
+                return
+            }
+            // Если разрешено, то не трогаем дальше
+            return
+        }
 
         // Проверяем блоки, с которыми нельзя взаимодействовать
         when (block.type) {
@@ -270,18 +281,16 @@ class DemoListener(private val demoManager: DemoManager) : Listener {
                 }
             }
 
-            // Верстаки
+            // Верстаки и автокрафтеры
             Material.CRAFTING_TABLE -> {
-                if (!demoManager.isAllowed("blocks", "allow-crafting-tables")) {
-                    event.isCancelled = true
-                    return
-                }
-            }
-
-            // Автокрафтеры
-            Material.CRAFTING_TABLE -> {
+                // Проверяем тип блока, чтобы различать обычный верстак и автокрафтер
                 if (block.type.name.contains("CRAFTER")) {
                     if (!demoManager.isAllowed("blocks", "allow-crafters")) {
+                        event.isCancelled = true
+                        return
+                    }
+                } else {
+                    if (!demoManager.isAllowed("blocks", "allow-crafting-tables")) {
                         event.isCancelled = true
                         return
                     }
