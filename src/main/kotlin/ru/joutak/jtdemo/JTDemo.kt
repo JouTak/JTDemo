@@ -2,33 +2,41 @@ package ru.joutak.jtdemo
 
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
+import ru.joutak.jtdemo.commands.base.CommandManager
 import java.io.File
 
 
 class JTDemo : JavaPlugin() {
 
     lateinit var demoManager: DemoManager
+    lateinit var warpManager: WarpManager
     private var lastModified: Long = 0
+    private var lastWarpsModified: Long = 0
     private var watcherTask: Int = -1
 
     override fun onEnable() {
         // Сохраняем конфигурацию по умолчанию, если она не существует
         saveDefaultConfig()
 
-        // Инициализируем менеджер демо-режима
+        // Инициализируем менеджеры
         demoManager = DemoManager(this)
+        warpManager = WarpManager(this)
 
         // Регистрируем обработчик событий
         server.pluginManager.registerEvents(DemoListener(demoManager), this)
 
-        // Регистрируем обработчик команд и автодополнение
+        // Регистрируем новый обработчик команд и автодополнение
         getCommand("jtdemo")?.let { command ->
-            val commandExecutor = DemoCommands(demoManager)
-            command.setExecutor(commandExecutor)
+            // Используем новый менеджер команд вместо DemoCommands
+            val commandManager = CommandManager(demoManager, warpManager)
+            command.setExecutor(commandManager)
+
+            // Для TabCompleter оставляем прежнюю реализацию
+            // В будущем можно создать соответствующий TabCompleter для новой системы команд
             command.tabCompleter = DemoTabCompleter(demoManager)
         }
 
-        // Настраиваем наблюдение за файлом данных
+        // Настраиваем наблюдение за файлами
         setupFileWatcher()
 
         logger.info("JTDemo плагин включен!")
@@ -42,31 +50,40 @@ class JTDemo : JavaPlugin() {
 
         // Сохраняем все данные
         demoManager.saveData()
+        warpManager.saveWarps()
         logger.info("JTDemo плагин выключен!")
     }
 
     /**
-     * Настраивает наблюдение за файлом данных
+     * Настраивает наблюдение за файлами данных
      */
     private fun setupFileWatcher() {
         val dataFile = File(dataFolder, "data.yml")
+        val warpsFile = File(dataFolder, "warps.yml")
 
-        // Если файл не существует, создаем его
+        // Если файлы не существуют, создаем их
         if (!dataFile.exists()) {
             dataFile.parentFile.mkdirs()
             dataFile.createNewFile()
         }
 
+        if (!warpsFile.exists()) {
+            warpsFile.parentFile.mkdirs()
+            warpsFile.createNewFile()
+        }
+
         // Сохраняем текущее время модификации
         lastModified = dataFile.lastModified()
+        lastWarpsModified = warpsFile.lastModified()
 
-        // Запускаем периодическую проверку файла каждые 5 секунд вместо чтения из конфига
+        // Запускаем периодическую проверку файлов каждые 5 секунд
         val checkInterval = 5L // Проверка каждые 5 секунд
         watcherTask = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, {
             checkDataFileChanges()
+            checkWarpsFileChanges()
         }, 20L * checkInterval, 20L * checkInterval)
 
-        logger.info("Настроено сохранение data.yml каждые $checkInterval секунд")
+        logger.info("Настроено наблюдение за файлами данных каждые $checkInterval секунд")
     }
 
     /**
@@ -94,6 +111,21 @@ class JTDemo : JavaPlugin() {
         // Обновляем lastModified без проверки
         if (dataFile.exists()) {
             lastModified = dataFile.lastModified()
+        }
+    }
+
+    /**
+     * Проверяет, был ли изменен файл варпов
+     */
+    private fun checkWarpsFileChanges() {
+        val warpsFile = File(dataFolder, "warps.yml")
+
+        if (warpsFile.exists() && warpsFile.lastModified() > lastWarpsModified) {
+            logger.info("Обнаружены изменения в файле warps.yml, перезагружаем данные...")
+            lastWarpsModified = warpsFile.lastModified()
+
+            // Перезагружаем варпы
+            warpManager.loadWarps()
         }
     }
 }

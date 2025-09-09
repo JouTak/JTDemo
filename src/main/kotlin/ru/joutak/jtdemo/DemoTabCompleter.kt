@@ -63,12 +63,6 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
                         }
                     }
                 }
-//                "off" -> {
-//                    // Для off предлагаем пароль по умолчанию, если это игрок в принудительном режиме
-//                    if (sender is Player && demoManager.isForcedDemoPlayer(sender)) {
-//                        completions.add(demoManager.getDefaultPassword())
-//                    }
-//                }
                 "tp" -> {
                     // Для tp предлагаем "all" и имена игроков в демо-режиме
                     if (sender.hasPermission("jtdemo.admin")) {
@@ -102,6 +96,37 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
                         }
                     }
                 }
+                "warp" -> {
+                    // Для warp предлагаем подкоманды
+                    if (sender.hasPermission("jtdemo.admin")) {
+                        val warpSubcommands = arrayOf("add", "delete", "del", "on", "off", "list", "tp")
+                        for (subcommand in warpSubcommands) {
+                            if (subcommand.startsWith(args[1].lowercase())) {
+                                completions.add(subcommand)
+                            }
+                        }
+                    }
+                }
+            }
+            return completions
+        }
+
+        // Автодополнение для третьего аргумента (в зависимости от подкоманды warp)
+        if (args.size == 3 && args[0].lowercase() == "warp") {
+            val plugin = demoManager.plugin
+            val warpManager = plugin.warpManager
+
+            when (args[1].lowercase()) {
+                "delete", "del", "on", "off", "tp" -> {
+                    // Для delete, on, off, tp предлагаем имена существующих варпов
+                    if (sender.hasPermission("jtdemo.admin")) {
+                        for (warpName in warpManager.getAllWarps()) {
+                            if (warpName.lowercase().startsWith(args[2].lowercase())) {
+                                completions.add(warpName)
+                            }
+                        }
+                    }
+                }
             }
             return completions
         }
@@ -128,6 +153,7 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
             commands.add("reload")
             commands.add("tp")
             commands.add("list")
+            commands.add("warp") // Добавляем команду warp
         }
 
         return commands
