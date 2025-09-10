@@ -97,15 +97,20 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
                     }
                 }
                 "warp" -> {
-                    // Для warp предлагаем подкоманды
+                    // Для всех игроков доступна только подкоманда tp
+                    completions.add("tp")
+
+                    // Для админов доступны все подкоманды
                     if (sender.hasPermission("jtdemo.admin")) {
-                        val warpSubcommands = arrayOf("add", "delete", "del", "on", "off", "list", "tp")
-                        for (subcommand in warpSubcommands) {
+                        val adminWarpSubcommands = arrayOf("set", "delete", "on", "off")
+                        for (subcommand in adminWarpSubcommands) {
                             if (subcommand.startsWith(args[1].lowercase())) {
                                 completions.add(subcommand)
                             }
                         }
                     }
+
+                    return completions.filter { it.startsWith(args[1].lowercase()) }
                 }
             }
             return completions
@@ -117,8 +122,24 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
             val warpManager = plugin.warpManager
 
             when (args[1].lowercase()) {
-                "delete", "del", "on", "off", "tp" -> {
-                    // Для delete, on, off, tp предлагаем имена существующих варпов
+                "tp" -> {
+                    // Для tp предлагаем имена существующих варпов всем игрокам
+                    val warps = warpManager.getAllWarps()
+                    // Если не админ, показываем только включенные варпы
+                    val filteredWarps = if (sender.hasPermission("jtdemo.admin")) {
+                        warps
+                    } else {
+                        warps.filter { warpManager.isWarpEnabled(it) }
+                    }
+
+                    for (warpName in filteredWarps) {
+                        if (warpName.lowercase().startsWith(args[2].lowercase())) {
+                            completions.add(warpName)
+                        }
+                    }
+                }
+                "delete", "on", "off" -> {
+                    // Только для админов
                     if (sender.hasPermission("jtdemo.admin")) {
                         for (warpName in warpManager.getAllWarps()) {
                             if (warpName.lowercase().startsWith(args[2].lowercase())) {
@@ -143,6 +164,8 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
         // Базовые команды доступны всем
         commands.add("on")
         commands.add("off")
+        commands.add("warps")   // Новая команда для всех - список варпов
+        commands.add("warp")    // Базовая команда warp доступна всем (для tp)
 
         // Административные команды доступны только с соответствующими правами
         if (sender.hasPermission("jtdemo.admin")) {
@@ -153,7 +176,6 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
             commands.add("reload")
             commands.add("tp")
             commands.add("list")
-            commands.add("warp") // Добавляем команду warp
         }
 
         return commands

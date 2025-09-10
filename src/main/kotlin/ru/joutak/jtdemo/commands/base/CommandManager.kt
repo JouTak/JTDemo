@@ -3,6 +3,7 @@ package ru.joutak.jtdemo.commands.base
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
+import ru.joutak.jtdemo.JTDemo
 import ru.joutak.jtdemo.DemoManager
 import ru.joutak.jtdemo.WarpManager
 import ru.joutak.jtdemo.commands.*
@@ -10,7 +11,11 @@ import ru.joutak.jtdemo.commands.*
 /**
  * Manages all demo commands
  */
-class CommandManager(private val demoManager: DemoManager, private val warpManager: WarpManager) : CommandExecutor {
+class CommandManager(
+    private val plugin: JTDemo,  // Добавлен параметр plugin
+    private val demoManager: DemoManager,
+    private val warpManager: WarpManager
+) : CommandExecutor {
     private val commands = mutableMapOf<String, BaseCommand>()
 
     init {
@@ -26,6 +31,7 @@ class CommandManager(private val demoManager: DemoManager, private val warpManag
         registerCommand(ListCommand(demoManager))
         registerCommand(WarpCommand(demoManager, warpManager))
         registerCommand(HelpCommand(demoManager, this))
+        registerCommand(WarpsCommand(plugin, demoManager, warpManager)) // Теперь передаём plugin
     }
 
     /**

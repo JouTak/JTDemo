@@ -169,4 +169,25 @@ class WarpManager(private val plugin: JTDemo) {
         val location = getWarpLocation(warpName) ?: return false
         return player.teleport(location)
     }
+
+    fun addOrUpdateWarp(name: String, location: Location, enabled: Boolean): Boolean {
+        // Создаем секцию для точки или обновляем существующую
+        val warpSection = if (warpsConfig.contains(name)) {
+            warpsConfig.getConfigurationSection(name) ?: warpsConfig.createSection(name)
+        } else {
+            warpsConfig.createSection(name)
+        }
+
+        // Сохраняем координаты и мир
+        warpSection.set("world", location.world?.name)
+        warpSection.set("x", location.x)
+        warpSection.set("y", location.y)
+        warpSection.set("z", location.z)
+        warpSection.set("yaw", location.yaw)
+        warpSection.set("pitch", location.pitch)
+        warpSection.set("enabled", enabled)
+
+        saveWarps()
+        return true
+    }
 }
