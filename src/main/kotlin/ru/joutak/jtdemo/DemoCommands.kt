@@ -304,6 +304,8 @@ class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
         sender.sendMessage("§6========== JTDemo Команды ==========")
         sender.sendMessage("§e/jtdemo on [пароль] §f- Включить демо-режим")
         sender.sendMessage("§e/jtdemo off [пароль] §f- Выключить демо-режим")
+        sender.sendMessage("§e/jtdemo warp [название] §f- Телепортироваться на указанный варп")
+        sender.sendMessage("§e/jtdemo warps §f- Показать список доступных варпов")
 
         if (sender.hasPermission("jtdemo.admin")) {
             sender.sendMessage("§e/jtdemo reset [игрок] §f- Сбросить пароль игрока на пароль по умолчанию")
@@ -313,7 +315,10 @@ class DemoCommands(private val demoManager: DemoManager) : CommandExecutor {
             sender.sendMessage("§e/jtdemo tp [all|игрок] §f- Телепортировать всех или конкретного игрока в демо-режиме на точку возрождения")
             sender.sendMessage("§e/jtdemo list §f- Показать список игроков в демо-режиме и принудительном демо-режиме")
             sender.sendMessage("§e/jtdemo reload §f- Перезагрузить плагин и обновить настройки")
+            sender.sendMessage("§e/jtdemo status §f- Показать текущие настройки плагина")
         }
+
+        sender.sendMessage("§e/jtdemo help §f- Показать это сообщение")
 
         sender.sendMessage("§6===================================")
     }

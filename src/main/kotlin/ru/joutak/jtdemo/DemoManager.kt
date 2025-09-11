@@ -556,22 +556,6 @@ class DemoManager(val plugin: JTDemo) {
     }
 
     /**
-     * Проверяет, разрешено ли действие в новой структуре конфига
-     * @param path Путь к настройке (например, "interactive-blocks.chests.open")
-     * @return true если действие разрешено
-     */
-    fun isAllowed(path: String): Boolean {
-        // Проверяем кэш для оптимизации
-        if (permissionCache.containsKey(path)) {
-            return permissionCache[path] ?: false
-        }
-
-        val result = plugin.config.getBoolean(path, false)
-        permissionCache[path] = result
-        return result
-    }
-
-    /**
      * Проверяет, разрешено ли действие в старой структуре конфига (для обратной совместимости)
      * @param section Раздел (например, "blocks" или "gameplay")
      * @param key Ключ (например, "allow-doors")
@@ -665,5 +649,31 @@ class DemoManager(val plugin: JTDemo) {
         return demoPlayers.mapNotNull { uuid ->
             Bukkit.getOfflinePlayer(uuid).name
         }
+    }
+
+    fun isAllowed(path: String): Boolean {
+        // Проверяем кэш для оптимизации
+        if (permissionCache.containsKey(path)) {
+            return permissionCache[path] ?: false
+        }
+
+        // ИСПРАВЛЕНО: Получаем значение с правильным дефолтным значением
+        // Важно использовать true как дефолтное значение для путей,
+        // начинающихся с "interactive-blocks", чтобы они работали по умолчанию
+        val defaultValue = when {
+            path.startsWith("interactive-blocks") -> true
+            else -> false
+        }
+
+        val result = plugin.config.getBoolean("restrictions.$path", defaultValue)
+        permissionCache[path] = result
+        return result
+    }
+
+    /**
+     * Очищает кэш разрешений
+     */
+    fun clearPermissionCache() {
+        permissionCache.clear()
     }
 }

@@ -176,6 +176,7 @@ class DemoTabCompleter(private val demoManager: DemoManager) : TabCompleter {
             commands.add("reload")
             commands.add("tp")
             commands.add("list")
+            commands.add("status")
         }
 
         return commands

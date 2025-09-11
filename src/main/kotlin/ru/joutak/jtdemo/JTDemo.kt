@@ -3,6 +3,7 @@ package ru.joutak.jtdemo
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 import ru.joutak.jtdemo.commands.base.CommandManager
+import ru.joutak.jtdemo.listeners.*
 import java.io.File
 
 class JTDemo : JavaPlugin() {
@@ -21,12 +22,14 @@ class JTDemo : JavaPlugin() {
         demoManager = DemoManager(this)
         warpManager = WarpManager(this)
 
-        // Регистрируем обработчик событий
-        server.pluginManager.registerEvents(DemoListener(demoManager), this)
+        // Регистрируем новые разделенные слушатели
+        server.pluginManager.registerEvents(PlayerDemoListener(demoManager), this)
+        server.pluginManager.registerEvents(InventoryDemoListener(demoManager), this)
+        server.pluginManager.registerEvents(BlockDemoListener(demoManager), this)
+        server.pluginManager.registerEvents(EntityDemoListener(demoManager), this)
 
         // Регистрируем команды и автодополнение
         getCommand("jtdemo")?.let { command ->
-            // Исправлено: передаем this как первый параметр
             val commandManager = CommandManager(this, demoManager, warpManager)
             command.setExecutor(commandManager)
             command.tabCompleter = DemoTabCompleter(demoManager)
@@ -87,9 +90,6 @@ class JTDemo : JavaPlugin() {
      */
     private fun checkDataFileChanges() {
         val dataFile = File(dataFolder, "data.yml")
-
-        // Обновляем lastModified без проверки изменений
-        // Для применения изменений используйте /jtdemo reload
         if (dataFile.exists()) {
             lastModified = dataFile.lastModified()
         }

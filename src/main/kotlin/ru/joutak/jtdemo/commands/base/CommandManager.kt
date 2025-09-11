@@ -12,14 +12,13 @@ import ru.joutak.jtdemo.commands.*
  * Manages all demo commands
  */
 class CommandManager(
-    private val plugin: JTDemo,  // Добавлен параметр plugin
+    private val plugin: JTDemo,
     private val demoManager: DemoManager,
     private val warpManager: WarpManager
 ) : CommandExecutor {
     private val commands = mutableMapOf<String, BaseCommand>()
 
     init {
-        // Register all commands
         registerCommand(OnCommand(demoManager))
         registerCommand(OffCommand(demoManager))
         registerCommand(ResetCommand(demoManager))
@@ -31,7 +30,8 @@ class CommandManager(
         registerCommand(ListCommand(demoManager))
         registerCommand(WarpCommand(demoManager, warpManager))
         registerCommand(HelpCommand(demoManager, this))
-        registerCommand(WarpsCommand(plugin, demoManager, warpManager)) // Теперь передаём plugin
+        registerCommand(WarpsCommand(plugin, demoManager, warpManager))
+        registerCommand(StatusCommand(demoManager))
     }
 
     /**
@@ -49,7 +49,6 @@ class CommandManager(
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (command.name.equals("jtdemo", ignoreCase = true)) {
             if (args.isEmpty()) {
-                // Use help command if no arguments provided
                 return commands["help"]?.execute(sender, emptyArray()) ?: false
             }
 
@@ -59,7 +58,6 @@ class CommandManager(
             return if (commands.containsKey(subCommand)) {
                 val cmd = commands[subCommand]!!
 
-                // Fix: Store permission in a local variable before checking
                 val permission = cmd.permission
                 if (permission != null && !sender.hasPermission(permission)) {
                     sender.sendMessage("§cУ вас нет прав для использования этой команды.")
@@ -68,7 +66,6 @@ class CommandManager(
 
                 cmd.execute(sender, subArgs)
             } else {
-                // Command not found, show help
                 commands["help"]?.execute(sender, emptyArray()) ?: false
             }
         }
